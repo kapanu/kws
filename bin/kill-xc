@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# (c) 2017 Kapanu AG 
+
+pid=$(pgrep -x Xcode)
+if [[ -n $pid ]]; then
+    kill $pid
+    echo "Killed Xcode running on PID $pid."
+else
+    echo "No runnin Xcode found"
+fi
+exit 0

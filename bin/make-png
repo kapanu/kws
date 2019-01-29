@@ -1,0 +1,131 @@
+#!/usr/bin/env python
+
+import sys, getopt, os
+
+def add_command(input_file, destination_dir, resolutions, resolution_scales, command_file_path, override):
+    filename = os.path.basename(input_file)
+    filename, _ = os.path.splitext(filename)
+    with open(command_file_path, "a") as command_file:
+        for resolution in resolutions:
+            for scale in resolution_scales[resolution]:
+                if scale == 1:
+                    destination = os.path.join(destination_dir, filename + str(resolution) + ".png")
+                else:
+                    destination = os.path.join(destination_dir, filename + str(resolution) + "@" + str(scale) + ".png")
+                total_resolution = int(resolution) * scale
+                # print "Total resolution is " + str(total_resolution) + " from " + str(resolution) + "X" + str(scale)
+                
+                if os.path.isfile(destination) and os.access(destination, os.R_OK):
+                    if not override:
+                        continue
+                command_file.write("-f " + input_file + " -e " + destination + " -y 0 -w " + str(total_resolution) + "\n")
+        command_file.close()
+                    
+def parse_file(file_handler):
+    parsed = []
+    lines = file_handler.readlines()
+    for line in lines:
+        parsed.append(parse_next_line(line))
+    return parsed
+
+def parse_next_line(line):
+    values = line.split()
+    leading_spaces = len(line) - len(line.lstrip())
+    indent_level = leading_spaces/2
+    if values[0] == "-":
+        key = ""
+        value = values[1]
+    elif len(values) == 1:
+        value = ""
+        key = values[0][:-1]
+    else:
+        key = values[0][:-1]
+        value = values[1]
+    # print "-----------"
+    # print "For line:  " + line
+    # print "Key: " + key
+    # print "Val: " + value
+    # print "ind: " + str(indent_level)
+    return key, value, indent_level
+                    
+def process_input_file(input_file, command_file_path, override=True):
+    png_detail_file = open(input_file, "r")
+    current_dir = os.path.dirname(os.path.abspath(input_file))
+    input_file = ""
+    destination_dir = ""
+    resolutions = []
+    resolution_scales = {}
+
+    data = parse_file(png_detail_file)
+    last_ind = 0
+    for entry in data:
+        if entry[2] == 0:
+            if last_ind > 0:
+                # print resolution_scales
+                add_command(input_file, destination_dir, resolutions, resolution_scales, command_file_path, override=True)
+                resolution_scales = {}
+                resolutions = []
+            input_file = current_dir + "/" + entry[0] + ".svg"
+            # print "reading properties of " + input_file
+        elif entry[2] == 1:
+            if entry[0] == "dir":
+                directory = entry[1]
+                # print "setting dir to " + directory
+            elif entry[0] == "destination":
+                destination_dir = current_dir + "/" + entry[1]
+                # print "setting destination to " + destination_dir
+            elif entry[0] == "resolution":
+                # print "iterating over resolutions"
+                pass
+        elif entry[2] == 2:
+            res = entry[1][:-1]
+            # print "resolution is: " + res
+            resolutions.append(res)
+            # print "iterating over scales"
+        elif entry[2] == 3:
+            scale = int(entry[1])
+            # print "scale is: " + resolutions[-1] + " x " + entry[1]
+            if resolutions[-1] in resolution_scales:
+                # append the new number to the existing array at this slot
+                resolution_scales[resolutions[-1]].append(scale)
+            else:
+                # create a new array in this slot
+                resolution_scales[resolutions[-1]] = [scale]
+        last_ind = entry[2]
+    add_command(input_file, destination_dir, resolutions, resolution_scales, command_file_path, override=True)
+
+def main(argv):
+    inputfile = ''
+    commandfile = ''
+    try:
+        opts, args = getopt.getopt(argv,"hi:c:",["ifile=","cfile="])
+    except getopt.GetoptError:
+      print 'make-png -i <yaml file> -c <comamnd file dir>'
+      sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print 'make-png -i <yaml file>'
+            sys.exit()
+        elif opt in ("-i", "--ifile"):
+            inputfile = arg
+        elif opt in ("-c", "--cfile"):
+            commandfile = arg
+    
+    current_dir = os.path.dirname(os.path.abspath(inputfile))
+    
+    if not commandfile:
+        command_file_path = current_dir + "/" + "commands.txt"
+    else:
+        command_file_path = commandfile
+    
+    process_input_file(inputfile, command_file_path)
+    os.system("inkscape --shell < " + command_file_path)
+    os.remove(command_file_path)
+    # print 'Input file is "', inputfile
+    # print 'Output file is "', commandfile
+
+if __name__ == "__main__":
+    # print 'Number of arguments:', len(sys.argv), 'arguments.'
+    # print 'Argument List:', str(sys.argv)
+    # print 'Script call location:', os.getcwd()
+    main(sys.argv[1:])
